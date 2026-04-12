@@ -5,11 +5,11 @@ class RAG:
     def __init__(self, embedding_model="sentence-transformers/all-MiniLM-L6-v2"):
         self.model = SentenceTransformer(embedding_model)
         self.chunks = []
-        self.index = faiss.IndexFlatIP(self.model.get_sentence_embedding_dimension())
+        self.index = faiss.IndexFlatIP(self.model.get_embedding_dimension())
 
     def encode(self, chunks):
         vectors = self.model.encode(chunks, convert_to_numpy=True, normalize_embeddings=True)
-        faiss.normalize_L2(vectors)
+        # faiss.normalize_L2(vectors)
         return vectors
 
     def add_context(self, context):
@@ -52,6 +52,8 @@ class RAG:
             if not ids:
                 continue
             text = self.model.tokenizer.decode(ids, skip_special_tokens=True, clean_up_tokenization_spaces=True).strip()
+            if len(text.split()) < 3:
+                continue
             if text:
                 chunks.append(text)
 
