@@ -31,7 +31,7 @@ rag.add_context(text)
 
 
 
-results = rag.retrieve_top_k("What types of work are done with python when it comes to data analysis?", k=5)
+results = rag.retrieve_top_k("What do many companies use python for", k=3)
 print("Total chunks:", len(rag.chunks))
 print("FAISS index size:", rag.index.ntotal)
 
