@@ -31,7 +31,7 @@ rag.add_context(text)
 
 
 
-results = rag.retrieve_top_k("What do many companies use python for", k=3)
+results = rag.retrieve_top_k("What python backend frameworks are used", k=6)
 print("Total chunks:", len(rag.chunks))
 print("FAISS index size:", rag.index.ntotal)
 

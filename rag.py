@@ -1,9 +1,13 @@
 import faiss
 from sentence_transformers import SentenceTransformer
 
+
 class RAG:
-    def __init__(self, embedding_model="sentence-transformers/all-MiniLM-L6-v2"):
-        self.model = SentenceTransformer(embedding_model)
+    def __init__(self, embedding_model="sentence-transformers/all-MiniLM-L6-v2", local_files_only=True):
+        self.model = SentenceTransformer(
+            embedding_model,
+            local_files_only=local_files_only, # Load Model Locally.
+        )
         self.model.max_seq_length = 200
         self.chunks = []
         self.index = faiss.IndexFlatIP(self.model.get_embedding_dimension())
@@ -12,6 +16,10 @@ class RAG:
         vectors = self.model.encode(chunks, convert_to_numpy=True, normalize_embeddings=True)
         # faiss.normalize_L2(vectors)
         return vectors
+
+    def reset(self):
+        self.chunks = []
+        self.index = faiss.IndexFlatIP(self.model.get_embedding_dimension())
 
     def add_context(self, context):
         chunks, vectors = self.chunk_context(context)
@@ -97,7 +105,6 @@ class RAG:
             return [], None 
 
         return final_chunks, self.encode(final_chunks)
-
 
 
 

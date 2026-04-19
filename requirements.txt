@@ -5,3 +5,4 @@ faiss-cpu
 numpy
 mcp
 rank-bm25
+datasets
