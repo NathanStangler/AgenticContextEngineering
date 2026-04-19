@@ -83,10 +83,6 @@ def p(pool): return random.choice(pool)
 def http(): return random.choice(list(HTTP.keys()))
 
 
-# ── Template definitions ───────────────────────────────────────────────────────
-# Each template is a list of (user, assistant) turn pairs.
-# Strings may reference local variables via .format(**ctx).
-
 def make_ctx():
     code1, code2 = random.sample(list(HTTP.keys()), 2)
     lang = p(LANGS)
@@ -119,7 +115,6 @@ def make_ctx():
     )
 
 TEMPLATES = [
-    # 0 — HTTP error basics
     lambda c: [
         ("I'm debugging a backend API. What does HTTP {code1} mean again?".format(**c),
          "It means {name1} — {desc1}.".format(**c)),
@@ -129,7 +124,6 @@ TEMPLATES = [
          "{code2} every time. {code1} errors are usually caller mistakes; {code2} is your system failing. Alert on sustained {code2} spikes.".format(**c)),
     ],
 
-    # 1 — Framework 404
     lambda c: [
         ("My {fw} app returns {code1} on {ep} but the route is definitely registered.".format(**c),
          "Double-check route ordering — in {fw}, a more specific route above it might be swallowing the request. Also verify any prefix middleware isn't stripping part of the path.".format(**c)),
@@ -139,7 +133,6 @@ TEMPLATES = [
          "At the ingress/nginx layer so every service benefits automatically. Add `rewrite ^(.*)/$ $1 permanent;` — one place, zero per-service code."),
     ],
 
-    # 2 — Language error debugging
     lambda c: [
         ("I'm seeing `{err}` in my {lang} service and I can't figure out why.".format(**c),
          "In {lang}, `{err}` usually means {tip}. Can you share the stack trace or the line that throws?".format(
@@ -150,7 +143,7 @@ TEMPLATES = [
          "Fix the root cause. Fallbacks here would hide the real bug. Once it's fixed, add an assertion test so it can't regress silently."),
     ],
 
-    # 3 — Git operation
+
     lambda c: [
         ("What's the difference between `git {git}` and `git merge`?".format(**c),
          "`git {git}` rewrites history — cleaner linear log but dangerous on shared branches. `git merge` preserves the full branch topology. Use `{git}` locally before pushing; use merge for shared branches.".format(**c)),
@@ -160,7 +153,7 @@ TEMPLATES = [
          "On `main`, `release/*`, or any branch another CI job is reading. Rewriting those breaks pipelines and blame history."),
     ],
 
-    # 4 — Database query perf
+
     lambda c: [
         ("My {db} query is timing out in production but fast locally. Likely cause?".format(**c),
          "Most common: {perf}. Production has orders-of-magnitude more rows so missing indexes or unoptimized joins become critical. Run `EXPLAIN ANALYZE` on prod (read-only replica) to see the actual query plan.".format(**c)),
@@ -170,7 +163,6 @@ TEMPLATES = [
          "No, that's the point. It builds the index without holding a write lock, so production traffic continues. Takes longer but is safe for live tables."),
     ],
 
-    # 5 — Refactoring
     lambda c: [
         ("I want to refactor {refactor}. Where do I even start?".format(**c),
          "Start by writing characterization tests — tests that lock in the current behavior without understanding it. Then you can refactor safely because the tests will catch regressions."),
@@ -180,7 +172,6 @@ TEMPLATES = [
          "Look for comment blocks — they're usually implicit function boundaries. Each block that could have a name is a candidate for extraction. Aim for functions that fit on one screen."),
     ],
 
-    # 6 — Docker issue
     lambda c: [
         ("My Docker container starts fine locally but crashes immediately in {cloud}.".format(**c),
          "Likely causes: env vars missing in {cloud} that exist in your local `.env`; a platform architecture mismatch (M1/M2 image vs amd64); or a missing secret/volume mount. Check the container logs in {cloud} first.".format(**c)),
@@ -190,7 +181,6 @@ TEMPLATES = [
          "Usually not. The `--platform` flag at build time is enough. If you push to a registry, use a multi-platform manifest so both architectures are covered: `--platform linux/amd64,linux/arm64`."),
     ],
 
-    # 7 — Testing philosophy
     lambda c: [
         ("Should I mock the database in my {test_fw} tests?".format(**c),
          "For unit tests, yes — mock the repo layer so tests are fast and isolated. For integration tests, use a real {db} (e.g. via Docker or testcontainers) so you catch query and schema issues mocks hide.".format(**c)),
@@ -200,7 +190,6 @@ TEMPLATES = [
          "Spin up {db} once per suite (not per test), use transactions that roll back after each test, and parallelize suites. With that setup 200 integration tests typically finish under 30 seconds.".format(**c)),
     ],
 
-    # 8 — Logging/observability
     lambda c: [
         ("What's the right log level for a failed external API call — {log} or something else?".format(**c),
          "Depends on whether it's expected. Transient failures (network blip, rate limit) → WARNING. Unexpected or repeated failures → ERROR. Never use {log} for errors you actually need to act on.".format(**c)),
@@ -210,7 +199,6 @@ TEMPLATES = [
          "Minimum: `timestamp`, `level`, `service`, `trace_id`, `message`. Add `user_id` or `request_id` where available. Avoid logging PII unless it's masked."),
     ],
 
-    # 9 — Performance
     lambda c: [
         ("My {lang} service latency spikes every few minutes. Where do I look first?".format(**c),
          "Periodic spikes usually point to GC pressure, scheduled jobs, or {db} connection pool exhaustion. Add histograms for GC pause time and pool wait time — whichever correlates with the spike is your culprit.".format(**c)),
@@ -221,7 +209,6 @@ TEMPLATES = [
          "Yes — tune GC aggressiveness first. In Go, `GOGC=200` halves GC frequency at the cost of more memory. In the JVM, switch to G1GC with `-XX:MaxGCPauseMillis=50`. Measure before and after."),
     ],
 
-    # 10 — CI/CD
     lambda c: [
         ("My {tool} pipeline fails on the deploy step but succeeds locally.".format(**c),
          "Classic causes: credentials not injected (secret missing in pipeline env), image pull policy difference, or a `latest` tag resolving to a different image. Add `--verbose` to the deploy command and check the exact error."),
@@ -231,7 +218,6 @@ TEMPLATES = [
          "Service account with minimal permissions — read/pull on the registry, deploy on the target env only. Deploy keys are tied to a human account and rotate with them. Service accounts are auditable and purpose-scoped."),
     ],
 
-    # 11 — Config/env
     lambda c: [
         ("What's the best way to manage secrets in a {lang} service?".format(**c),
          "12-factor: env vars injected at runtime, never in source. In {cloud} use the native secrets manager (AWS Secrets Manager, GCP Secret Manager). Locally, `.env` file that's gitignored + `python-dotenv` / `dotenv` package.".format(**c)),
@@ -241,7 +227,6 @@ TEMPLATES = [
          "Deploy the new secret alongside the old one, update the app to accept both (dual-read), roll the deploy, then remove the old secret. This is the blue/green secrets pattern — zero downtime."),
     ],
 
-    # 12 — ORM/query
     lambda c: [
         ("Should I use raw SQL or {orm} for this complex join across 4 tables?".format(**c),
          "For complex joins, raw SQL is usually clearer and easier to optimize. {orm} excels at CRUD on single entities. The hybrid: use {orm} for simple queries, `session.execute(text(...))` or repository raw SQL for analytics.".format(**c)),
@@ -251,7 +236,6 @@ TEMPLATES = [
          "Yes. {orm} gives you migrations, schema introspection, connection pooling, and safe parameter binding. Use it as infrastructure, not as a query builder for complex queries.".format(**c)),
     ],
 
-    # 13 — Architecture concept
     lambda c: [
         ("Can you explain {concept} in plain terms?".format(**c),
          "{concept} is a pattern where {explanation}. The core idea is to separate concerns so each part can evolve independently.".format(
@@ -276,7 +260,6 @@ TEMPLATES = [
          "Over-engineering it before you need it. Start simple, measure the pain, then introduce {concept} surgically. Most teams that adopt it too early spend months fighting accidental complexity.".format(**c)),
     ],
 
-    # 14 — Code review
     lambda c: [
         ("Can you review this function? It works but feels off:\n```{lang}\ndef process(items):\n    result = []\n    for i in range(len(items)):\n        if items[i] is not None:\n            result.append(items[i] * 2)\n    return result\n```".format(**c),
          "Three things: (1) `range(len(items))` → iterate directly `for item in items`; (2) the `None` check → use a comprehension; (3) no type hints. Cleaner: `def process(items: list) -> list: return [x * 2 for x in items if x is not None]`"),
@@ -286,7 +269,6 @@ TEMPLATES = [
          "Only if the function name and type hints don't already tell the story. `process` is vague enough that a one-liner would help: `\"\"\"Double all non-None items.\"\"\"` — but the real fix is renaming to `double_non_null_items`."),
     ],
 
-    # 15 — Security
     lambda c: [
         ("Is it safe to log the full request body in {fw}?".format(**c),
          "No. Request bodies often contain passwords, tokens, PII, or payment data. Log a sanitized version: drop known-sensitive fields (`password`, `token`, `ssn`, `card_number`) and truncate large payloads. Never log Authorization headers."),
@@ -296,7 +278,6 @@ TEMPLATES = [
          "Treat it as an incident: identify the window, check who has log access, notify your security team, rotate any exposed credentials immediately, and document the timeline. Don't just delete the logs without a retention policy review."),
     ],
 
-    # 16 — Async/concurrency
     lambda c: [
         ("When should I use async/await vs threads in {lang}?".format(**c),
          "Async for I/O-bound work (HTTP calls, DB queries, file reads) — low overhead, high concurrency. Threads for CPU-bound or blocking code that can't be made async. In Python specifically, the GIL means threads don't parallelize CPU work — use `multiprocessing` there."),
@@ -306,7 +287,6 @@ TEMPLATES = [
          "Yes: if one task raises, `gather` cancels the others by default. Pass `return_exceptions=True` if you want all results regardless. Also watch for shared mutable state — async doesn't give you a free pass from race conditions."),
     ],
 
-    # 17 — Dependency management
     lambda c: [
         ("Should I pin exact versions in my {lang} dependencies or use ranges?".format(**c),
          "Pin exact versions in application lock files (poetry.lock, package-lock.json, go.sum) — reproducible builds. Use ranges only in library manifests so consumers aren't boxed in. Never loose ranges in app code."),
@@ -316,7 +296,6 @@ TEMPLATES = [
          "Read the migration guide, update in a separate branch, run the full test suite including integration tests, then do a canary deploy before rolling out fully. Major bumps often have subtle behavior changes tests don't catch — shadow traffic in staging first if you can."),
     ],
 
-    # 18 — File/IO
     lambda c: [
         ("Best way to read a large file in {lang} without loading it all into memory?".format(**c),
          "Stream it line-by-line or in chunks. In Python: `for line in open('file'):`. In Go: `bufio.Scanner`. In Node: `fs.createReadStream` piped through a line reader. Never `readFile` or `File.read()` on multi-GB files."),
@@ -326,7 +305,6 @@ TEMPLATES = [
          "Write to a temp file, then atomically rename it to the final path. `os.rename` is atomic on POSIX — either you get the old file or the new one, never a partial. Add a `.tmp` suffix and clean up stale tmps on startup."),
     ],
 
-    # 19 — Caching
     lambda c: [
         ("Should I cache {db} query results in {fw}? The query runs every request.".format(**c),
          "If the data is read-heavy and can tolerate slight staleness — yes. Use {db} or Redis with a TTL matching your staleness tolerance. Cache at the service layer, not the DB layer, so the cache is query-aware.".format(**c)),
@@ -336,7 +314,6 @@ TEMPLATES = [
          "Use probabilistic early expiration (PER) or a lock-based approach: when an item expires, one request recomputes while others wait on a short lock. In Redis, use `SET key value EX ttl NX` to implement a simple mutex around the recompute."),
     ],
 
-    # 20 — Kubernetes/infra
     lambda c: [
         ("My pod keeps OOMKilling. I set the memory limit to 512Mi but the service needs more.",
          "Either raise the limit (if the usage is legitimate) or fix the leak. First: `kubectl top pod` to see actual usage over time. If it grows unbounded it's a leak; if it stabilizes at 600Mi, just raise the limit to 768Mi with headroom."),
@@ -346,9 +323,7 @@ TEMPLATES = [
          "For memory yes — keeps the pod in the Guaranteed QoS class so the kubelet won't evict it under node pressure. For CPU, set requests conservatively and leave limits loose (or unset) to avoid throttling on a bursty workload."),
     ],
 
-    # ── Non-tech domains ──────────────────────────────────────────────────────
 
-    # 21 — Medicine / symptoms
     lambda c: [
         ("What's the difference between a virus and a bacteria?",
          "Bacteria are single-celled living organisms that replicate on their own and can be killed with antibiotics. Viruses are non-living particles that hijack host cells to reproduce — antibiotics don't work on them."),
@@ -358,7 +333,7 @@ TEMPLATES = [
          "Random mutations in bacteria occasionally produce resistance. When you take antibiotics, susceptible bacteria die but resistant ones survive and replicate. The more often antibiotics are used unnecessarily, the faster resistance spreads through the population."),
     ],
 
-    # 22 — Finance / investing
+
     lambda c: [
         ("What's the difference between a stock and a bond?",
          "A stock is ownership in a company — you share in profits and losses. A bond is a loan to a company or government — you earn fixed interest and get your principal back at maturity. Stocks are higher risk/reward; bonds are lower risk/reward."),
@@ -368,7 +343,6 @@ TEMPLATES = [
          "Expense ratio matters most. A 0.03% expense ratio (e.g. Vanguard VTSAX) vs a 1% ratio costs you ~30% of your ending portfolio over 30 years due to compounding. For broad-market index funds, pick the lowest-cost option available to you."),
     ],
 
-    # 23 — History
     lambda c: [
         ("Why did the Roman Empire fall?",
          "No single cause — it was a convergence: military overextension, economic inflation from debasing the currency, political instability (50+ emperors in 50 years at one point), pressure from Germanic tribes, and a shrinking tax base from depopulation and plague."),
@@ -378,7 +352,7 @@ TEMPLATES = [
          "Lead poisoning is a fringe theory but infectious disease is seriously underrated. The Antonine Plague (165 CE) and Plague of Cyprian (249 CE) killed millions and hollowed out the military and tax base at critical moments. Demographic collapse precedes political collapse."),
     ],
 
-    # 24 — Psychology / behavior
+    
     lambda c: [
         ("What's the difference between intrinsic and extrinsic motivation?",
          "Intrinsic motivation comes from internal satisfaction — curiosity, mastery, meaning. Extrinsic comes from external rewards — money, grades, praise. Both work, but research (self-determination theory) shows intrinsic motivation leads to more sustained engagement and creativity."),
@@ -388,7 +362,6 @@ TEMPLATES = [
          "Three levers from self-determination theory: autonomy (let people choose how they work), mastery (give challenging but achievable goals), and purpose (connect work to something meaningful). Micromanagement destroys all three simultaneously."),
     ],
 
-    # 25 — Legal concepts
     lambda c: [
         ("What's the difference between civil and criminal law?",
          "Criminal law is the state prosecuting an individual for an offense against society — the burden is 'beyond reasonable doubt' and punishment is prison or fines. Civil law is disputes between private parties — the burden is 'preponderance of evidence' (>50% likely) and remedies are usually monetary."),
@@ -398,7 +371,7 @@ TEMPLATES = [
          "There's no mathematical definition, but courts describe it as near-certainty — not absolute certainty (impossible) but much more than probable. Studies suggest jurors interpret it as roughly 90–95% confidence. The high bar protects against wrongful convictions."),
     ],
 
-    # 26 — Physics concepts
+ 
     lambda c: [
         ("Can you explain why the sky is blue in simple terms?",
          "Sunlight contains all colors. When it hits the atmosphere, gas molecules scatter shorter wavelengths (blue, violet) much more than longer ones (red, orange). Your eye is more sensitive to blue than violet, so the sky looks blue rather than violet."),
@@ -408,7 +381,7 @@ TEMPLATES = [
          "Exactly. No atmosphere means no scattering, so the sky is black even with the Sun out. You'd see stars in broad daylight and harsh, unfiltered sunlight on one side with stark black shadow on the other."),
     ],
 
-    # 27 — Economics
+ 
     lambda c: [
         ("What's the difference between inflation and deflation, and which is worse?",
          "Inflation is a general rise in prices (money loses purchasing power). Deflation is a fall in prices (money gains purchasing power). Mild inflation (~2%) is considered healthy. Deflation sounds good but is dangerous — it incentivizes consumers to delay spending, which spirals into recession."),
@@ -418,7 +391,6 @@ TEMPLATES = [
          "The Fed creates new money and uses it to buy government bonds (and sometimes other assets) from banks. This pushes money into the financial system, lowers long-term interest rates, and encourages lending and investment. Critics say it inflates asset prices and widens inequality."),
     ],
 
-    # 28 — Biology
     lambda c: [
         ("How does a vaccine actually train the immune system?",
          "A vaccine introduces an antigen — a harmless piece of a pathogen (protein, weakened virus, mRNA instructions to make a protein) — that your immune system treats as a threat. It produces antibodies and, crucially, memory B and T cells that recognize that antigen in the future."),
@@ -428,7 +400,7 @@ TEMPLATES = [
          "Antibody levels wane over time for some pathogens. Boosters restimulate the memory cells, raising antibody titers again. For fast-mutating viruses like influenza or COVID variants, boosters may also update the antigen to match the current circulating strain."),
     ],
 
-    # 29 — Nutrition / health
+
     lambda c: [
         ("Is saturated fat actually bad for you? I keep reading conflicting things.",
          "The evidence is genuinely mixed. Early research (Ancel Keys) linked saturated fat to heart disease via LDL cholesterol. More recent meta-analyses find weak or no independent association when carbohydrates replace the fat. Context matters — replacing saturated fat with refined carbs may be worse than keeping it."),
@@ -438,7 +410,6 @@ TEMPLATES = [
          "Minimize ultra-processed foods, refined sugars, and trans fats (strong consensus). Beyond that: mostly whole foods — vegetables, legumes, nuts, fish, quality protein. Mediterranean and DASH patterns have the most consistent positive evidence. Calories in/out still matters for weight."),
     ],
 
-    # 30 — Philosophy
     lambda c: [
         ("What's the difference between deontological and consequentialist ethics?",
          "Deontological ethics (Kant) says actions are inherently right or wrong regardless of outcomes — lying is always wrong even if it saves lives. Consequentialism (Mill/Bentham) judges actions solely by their outcomes — the right action maximizes good consequences."),
@@ -448,7 +419,6 @@ TEMPLATES = [
          "It helps by surfacing hidden assumptions, clarifying which values are in conflict, and making trade-offs explicit. It rarely gives you a clean answer, but it stops you from being unknowingly inconsistent — which is most of what goes wrong in real ethical failures."),
     ],
 
-    # 31 — Climate / environment
     lambda c: [
         ("What's the difference between weather and climate?",
          "Weather is the atmospheric state right now or over days — temperature, precipitation, wind. Climate is the statistical pattern over 30+ years. 'Climate is what you expect, weather is what you get.' A cold day doesn't refute warming; a decade of shifted averages does."),
@@ -458,7 +428,6 @@ TEMPLATES = [
          "Flight reduction and plant-rich diet have the largest individual footprints. But individual action is dwarfed by systemic change — supporting policy (carbon pricing, clean energy mandates) and voting have higher leverage than any lifestyle change. Both matter, but don't let 'personal responsibility' framing substitute for political action."),
     ],
 
-    # 32 — Education / learning
     lambda c: [
         ("What's the most effective way to study and actually retain information?",
          "Spaced repetition and active recall beat passive re-reading by a large margin. Instead of highlighting and re-reading, close the book and try to recall the material. Then space out reviews — test yourself after 1 day, 3 days, 1 week, 1 month."),
@@ -468,7 +437,7 @@ TEMPLATES = [
          "Anki is the gold standard — free, open-source, algorithm-driven scheduling. For language learning, Duolingo uses a similar algorithm. The tool matters less than the habit: 20 minutes of daily reviews beats a 3-hour cram session the night before."),
     ],
 
-    # 33 — Writing / communication
+
     lambda c: [
         ("How do I make my writing more concise without losing meaning?",
          "Cut these first: filler openers ('It is important to note that...'), redundant pairs ('each and every', 'first and foremost'), weak intensifiers ('very', 'really', 'quite'), and passive voice where active is clearer. Then read each sentence and ask: what's doing real work here?"),
@@ -669,7 +638,6 @@ def make_retrieval_candidates(conversation: list, k: int = 8) -> list:
     chunks = []
     for turn in conversation:
         if turn["role"] == "assistant":
-            # split on sentence boundaries
             raw = turn["content"].replace(" — ", ". ").replace(": ", ". ")
             for sent in raw.split(". "):
                 sent = sent.strip()

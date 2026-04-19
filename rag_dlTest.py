@@ -66,7 +66,6 @@ wildchat_ds = [
 ]
 
 def build_corpus(samples):
-    """Global retrieval corpus (IMPORTANT FIX)."""
     corpus = []
 
     for s in samples:
@@ -143,7 +142,6 @@ def run_eval(k=5):
 
         rag = RAG()
 
-        # IMPORTANT: global corpus, not conversation-only
         for c in random.sample(corpus, min(200, len(corpus))):
             rag.add_context(c)
 

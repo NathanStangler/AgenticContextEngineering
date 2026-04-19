@@ -53,7 +53,6 @@ def ndcg_at_k(model, loader, device, k=5):
                     device="cpu"
                 )
 
-                # 🔥 FIX: force same length
                 L = min(len(scores_i), len(labels_i))
 
                 scores_i = scores_i[:L]

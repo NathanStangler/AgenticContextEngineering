@@ -96,7 +96,7 @@ class MultiChunkTransformer(nn.Module):
             self.conversation_to_text(conv) for conv in conversation
         ]
 
-        C = self.encode(convo_texts).unsqueeze(1)  # [B,1,D]
+        C = self.encode(convo_texts).unsqueeze(1)
 
         flat_chunks = [c for group in chunks for c in group]
 
@@ -105,10 +105,9 @@ class MultiChunkTransformer(nn.Module):
         lengths = [len(c) for c in chunks]
         H = torch.split(H_1d, lengths)
 
-        H = pad_sequence(H, batch_first=True)  # [B,K,D]
+        H = pad_sequence(H, batch_first=True) 
 
-        attn_out, _ = self.cross_attention(H, C, C)  # Q=chunks, K=V=conversation
-
+        attn_out, _ = self.cross_attention(H, C, C) 
         H = H + attn_out
 
 
