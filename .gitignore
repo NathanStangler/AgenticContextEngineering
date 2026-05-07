@@ -40,5 +40,5 @@ wheelhouse/
 *.cache
 *.pid
 
-.env.*
+*.env
 !.env.example

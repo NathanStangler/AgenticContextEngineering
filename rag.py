@@ -1,16 +1,17 @@
 import faiss
 from sentence_transformers import SentenceTransformer
 
-
 class RAG:
-    def __init__(self, embedding_model="sentence-transformers/all-MiniLM-L6-v2", local_files_only=True):
+    def __init__(self, embedding_model="sentence-transformers/all-MiniLM-L6-v2", local_files_only=True, chunk_max_tokens=200, overlap_percentage=0.2):
         self.model = SentenceTransformer(
             embedding_model,
             local_files_only=local_files_only, # Load Model Locally.
         )
         self.model.max_seq_length = 200
+        self.chunk_max_tokens = chunk_max_tokens
+        self.overlap_percentage = overlap_percentage
         self.chunks = []
-        self.index = faiss.IndexFlatIP(self.model.get_embedding_dimension())
+        self.index = faiss.IndexFlatIP(self.model.get_sentence_embedding_dimension())
 
     def encode(self, chunks):
         vectors = self.model.encode(chunks, convert_to_numpy=True, normalize_embeddings=True)
@@ -19,10 +20,10 @@ class RAG:
 
     def reset(self):
         self.chunks = []
-        self.index = faiss.IndexFlatIP(self.model.get_embedding_dimension())
+        self.index = faiss.IndexFlatIP(self.model.get_sentence_embedding_dimension())
 
     def add_context(self, context):
-        chunks, vectors = self.chunk_context(context)
+        chunks, vectors = self.chunk_context(context, max_tokens=self.chunk_max_tokens, overlap_percentage=self.overlap_percentage)
 
         if not chunks:
             return

@@ -1,6 +1,7 @@
 from time import perf_counter
 
 from rag import RAG
+from reranker import LearnedChunkReranker
 from summarization import Summarization
 from token_usage import count_tokens
 
@@ -22,8 +23,10 @@ class SessionState:
 			"token_context": 0,
 			"retrieval_time_ms": 0.0,
 			"summarization_time_ms": 0.0,
+			"rerank_time_ms": 0.0,
 			"context_build_time_ms": 0.0,
 			"last_mode": None,
+			"last_reranker": None,
 			"history": [],
 		}
 
@@ -31,14 +34,23 @@ class SessionState:
 class ContextManager:
 	VALID_MODES = {"full_context", "rag", "dynamic_context"}
 
-	def __init__(self, embedding_model = "sentence-transformers/all-MiniLM-L6-v2", summarization_model = "google-t5/t5-base"):
+	def __init__(self, embedding_model = "sentence-transformers/all-MiniLM-L6-v2", summarization_model = "facebook/bart-large-cnn", reranker_weights = "train/model.pth", chunk_max_tokens = 200, overlap_percentage = 0.2):
 		self.embedding_model = embedding_model
 		self.summarization_model = summarization_model
 		self.summarizer = Summarization(model_name=summarization_model)
+		self.reranker = LearnedChunkReranker(weights_path=reranker_weights)
+		self.chunk_max_tokens = chunk_max_tokens
+		self.overlap_percentage = overlap_percentage
 		self.session = self._new_session()
 
 	def _new_session(self):
-		return SessionState(rag=RAG(embedding_model=self.embedding_model))
+		return SessionState(
+			rag=RAG(
+				embedding_model=self.embedding_model,
+				chunk_max_tokens=self.chunk_max_tokens,
+				overlap_percentage=self.overlap_percentage,
+			),
+		)
 
 	def _get_session(self):
 		return self.session
@@ -71,9 +83,46 @@ class ContextManager:
 	def _allocate_summary_tokens(token_budget):
 		if token_budget <= 20:
 			return {"min_new_tokens": 5, "max_new_tokens": max(10, token_budget // 2)}
-		max_new = max(20, min(180, int(token_budget * 0.4)))
+		max_new = max(20, min(120, int(token_budget * 0.25)))
 		min_new = max(10, int(max_new * 0.5))
 		return {"min_new_tokens": min_new, "max_new_tokens": max_new}
+
+	def _rerank_chunks(self, query, retrieved, use_reranker):
+		selected_chunks = [item["text"] for item in retrieved]
+		sim_scores = [item.get("score", 0.0) for item in retrieved]
+
+		if not use_reranker or not self.reranker.available or not selected_chunks:
+			retrieved_chunks = [
+				{"text": selected_chunks[i], "score": float(sim_scores[i]), "rerank_score": None}
+				for i in range(len(selected_chunks))
+			]
+			return {
+				"order": list(range(len(selected_chunks))),
+				"rerank_scores": None,
+				"retrieved_chunks": retrieved_chunks,
+				"reranked_chunks": retrieved_chunks,
+			}
+
+		r_start = perf_counter()
+		rerank_scores = self.reranker.score(query, selected_chunks)
+		r_time_ms = (perf_counter() - r_start) * 1000
+
+		order = sorted(range(len(selected_chunks)), key=lambda idx: rerank_scores[idx], reverse=True)
+		retrieved_chunks = [
+			{"text": selected_chunks[i], "score": float(sim_scores[i]), "rerank_score": float(rerank_scores[i])}
+			for i in range(len(selected_chunks))
+		]
+		reranked_chunks = [
+			{"text": selected_chunks[i], "score": float(sim_scores[i]), "rerank_score": float(rerank_scores[i])}
+			for i in order
+		]
+		return {
+			"order": order,
+			"rerank_scores": rerank_scores,
+			"retrieved_chunks": retrieved_chunks,
+			"reranked_chunks": reranked_chunks,
+			"rerank_time_ms": r_time_ms,
+		}
 
 	def ingest_turn(self, role, text, metadata = None):
 		session = self._get_session()
@@ -90,12 +139,16 @@ class ContextManager:
 		session.metrics["token_in"] += count_tokens(payload)
 		return {"ok": True, "turn_count": session.metrics["turn_count"]}
 
-	def build_prompt_context(self, query, token_budget, mode = "dynamic_context", top_k = 5):
+	def build_prompt_context(self, query, token_budget, mode = "dynamic_context", top_k = 5, use_reranker = True, summary_min_tokens = None, summary_max_tokens = None):
 		if mode not in self.VALID_MODES:
 			raise ValueError(f"mode must be one of {sorted(self.VALID_MODES)}")
 
 		session = self._get_session()
 		started = perf_counter()
+		rerank_time_ms = 0.0
+		reranked_chunks = []
+		retrieved_chunks = []
+		reranker_used = False
 
 		if mode == "full_context":
 			context_text = self._join_turns(session.turns)
@@ -107,7 +160,13 @@ class ContextManager:
 			retrieve_start = perf_counter()
 			retrieved = session.rag.retrieve_top_k(query=query, k=top_k)
 			retrieval_ms = (perf_counter() - retrieve_start) * 1000
-			selected_chunks = [item["text"] for item in retrieved]
+			rerank_pkg = self._rerank_chunks(query, retrieved, use_reranker=use_reranker)
+			retrieved_chunks = rerank_pkg["retrieved_chunks"]
+			reranked_chunks = rerank_pkg["reranked_chunks"]
+			r_order = rerank_pkg["order"]
+			selected_chunks = [retrieved_chunks[i]["text"] for i in r_order]
+			rerank_time_ms = rerank_pkg.get("rerank_time_ms", 0.0)
+			reranker_used = use_reranker and self.reranker.available
 
 			if mode == "rag":
 				context_text = "\n".join(selected_chunks)
@@ -115,7 +174,12 @@ class ContextManager:
 				summarization_ms = 0.0
 			else:
 				sum_start = perf_counter()
-				limits = self._allocate_summary_tokens(token_budget)
+				if summary_min_tokens is not None or summary_max_tokens is not None:
+					min_new = summary_min_tokens if summary_min_tokens is not None else 10
+					max_new = summary_max_tokens if summary_max_tokens is not None else max(min_new, 40)
+					limits = {"min_new_tokens": min_new, "max_new_tokens": max_new}
+				else:
+					limits = self._allocate_summary_tokens(token_budget)
 				summary = self.summarizer.summarize(
 					selected_chunks,
 					max_tokens=limits["max_new_tokens"],
@@ -123,14 +187,10 @@ class ContextManager:
 				)
 				summarization_ms = (perf_counter() - sum_start) * 1000
 
-				# Keep a compact context package with both compressed and raw signal.
 				context_text = "\n".join(
 					[
 						"Summary:",
 						summary,
-						"",
-						"Key Retrieved Chunks:",
-						*[f"- {chunk}" for chunk in selected_chunks[:3]],
 					]
 				).strip()
 
@@ -147,13 +207,16 @@ class ContextManager:
 			"context_tokens": context_tokens,
 			"retrieval_time_ms": retrieval_ms,
 			"summarization_time_ms": summarization_ms,
+			"rerank_time_ms": rerank_time_ms,
 			"context_build_time_ms": elapsed_ms,
 		}
 		session.metrics["token_context"] += context_tokens
 		session.metrics["retrieval_time_ms"] += retrieval_ms
 		session.metrics["summarization_time_ms"] += summarization_ms
+		session.metrics["rerank_time_ms"] += rerank_time_ms
 		session.metrics["context_build_time_ms"] += elapsed_ms
 		session.metrics["last_mode"] = mode
+		session.metrics["last_reranker"] = reranker_used
 		session.metrics["history"].append(history_row)
 
 		return {
@@ -163,10 +226,14 @@ class ContextManager:
 			"context_tokens": context_tokens,
 			"token_budget": token_budget,
 			"selected_chunks": selected_chunks,
+			"retrieved_chunks": retrieved_chunks,
+			"reranked_chunks": reranked_chunks,
+			"reranker_used": reranker_used,
 			"summary": summary,
 			"timing_ms": {
 				"retrieval": retrieval_ms,
 				"summarization": summarization_ms,
+				"rerank": rerank_time_ms,
 				"context_build": elapsed_ms,
 			},
 		}
@@ -191,11 +258,18 @@ class ContextManager:
 		)
 
 	def tool_build_prompt_context(self, payload):
+		min_summary = payload.get("min_summary_tokens")
+		max_summary = payload.get("max_summary_tokens")
+		min_summary = int(min_summary) if min_summary is not None else None
+		max_summary = int(max_summary) if max_summary is not None else None
 		return self.build_prompt_context(
 			query=payload["query"],
 			token_budget=int(payload.get("token_budget", 600)),
 			mode=payload.get("mode", "dynamic_context"),
 			top_k=int(payload.get("top_k", 5)),
+			use_reranker=bool(payload.get("use_reranker", True)),
+			summary_min_tokens=min_summary,
+			summary_max_tokens=max_summary,
 		)
 
 	def tool_record_response(self, payload):

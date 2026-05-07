@@ -1,12 +1,26 @@
 # Deep Learning for Dynamic Context Engineering in Agentic Systems
 
-## Context Engine Integration (Claude-style Agent Loops)
+## Overview
+This project builds a dynamic context engine for long-running conversations. Given a new user prompt and an accumulated history, the system retrieves, re-ranks, and summarizes prior context under a token budget.
 
-The project includes an integration adapter in `integration.py` that exposes
-the core context-engineering lifecycle used by agentic systems:
+Main components:
+- FAISS based retriever with sentence-transformer embeddings.
+- Learned cross-attention re-ranker for query conditioned chunk importance.
+- Summarization pipeline for token efficient context packaging.
+- MCP server exposing context tools for agent integration.
+- Benchmarking and training utilities.
+
+## Setup
+
+```bash
+pip install -r requirements.txt
+```
+
+## Core Context Engine
+The integration adapter in integration.py exposes the standard agent loop lifecycle:
 
 1. `ingest_turn(role, text, metadata=None)`
-2. `build_prompt_context(query, token_budget, mode="dynamic_context", top_k=5)`
+2. `build_prompt_context(query, token_budget, mode="dynamic_context", top_k=5, use_reranker=True)`
 3. `record_response(response_text, metadata=None)`
 4. `get_metrics()`
 
@@ -15,26 +29,50 @@ Supported modes:
 - `rag`
 - `dynamic_context`
 
-Agent integration pattern:
-1. Ingest incoming user turn.
-2. Build prompt context under a token budget.
-3. Send returned context to your base model.
-4. Record model response.
-
-Run the integration demo:
+Run the demo:
 
 ```bash
 python integration.py
 ```
 
-## Install
+## MCP Server
+Start the server:
 
 ```bash
-pip install -r requirements.txt
+python server.py
 ```
 
-## Run Test
+## Agent Demo (LangChain + Gemini)
+The demo agent calls the MCP server for memory.
 
 ```bash
-python test.py
+set GOOGLE_API_KEY=your_key_here
+python agent.py
+```
+
+## Benchmarking
+Run the benchmark on the processed dataset:
+
+```bash
+python benchmark.py --limit 20 --token-budget 600
+```
+
+The benchmark reports NDCG@K, Recall@K, and average context tokens for:
+- `rag`
+- `dynamic_context`
+- `rag_rerank`
+- `dynamic_context_rerank`
+
+## Reranker Training
+Train the cross-attention re-ranker:
+
+```bash
+python train/model_train.py
+```
+
+## Dataset Generation
+Regenerate the synthetic dataset:
+
+```bash
+python data/raw/generate_data.py
 ```

@@ -6,3 +6,8 @@ numpy
 mcp
 rank-bm25
 datasets
+langchain
+langchain-google-genai
+python-dotenv
+pandas
+tqdm

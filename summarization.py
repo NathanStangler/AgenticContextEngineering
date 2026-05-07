@@ -8,10 +8,21 @@ class Summarization:
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.model = self.model.to(self.device)
 
+    def _trim_to_tokens(self, text, max_tokens):
+        if max_tokens <= 0:
+            return ""
+        token_ids = self.tokenizer.encode(text, add_special_tokens=False)
+        if len(token_ids) <= max_tokens:
+            return text
+        trimmed = token_ids[:max_tokens]
+        return self.tokenizer.decode(trimmed, skip_special_tokens=True).strip()
+
     def generate(self, input_text, max_new_tokens, min_new_tokens):
         inputs = self.tokenizer(input_text, return_tensors="pt", truncation=True, padding=True)
         input_ids = inputs.input_ids.to(self.device)
         attention_mask = inputs.attention_mask.to(self.device)
+
+        min_new_tokens = max(1, min(min_new_tokens, max_new_tokens))
 
         with torch.no_grad():
             generated = self.model.generate(
@@ -25,7 +36,8 @@ class Summarization:
                 early_stopping=True
             )
 
-        return self.tokenizer.decode(generated[0], skip_special_tokens=True).strip()
+        decoded = self.tokenizer.decode(generated[0], skip_special_tokens=True).strip()
+        return self._trim_to_tokens(decoded, max_new_tokens)
 
     def summarize(self, chunks, max_tokens=128, min_tokens=30):
         chunks = [c.strip() for c in chunks if c and c.strip()]
