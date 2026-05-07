@@ -1,3 +1,4 @@
+import runtime_settings
 # Notes:
 # Multi-Chunk Cross-Attention Transformer for Chunk Importance Scoring
 # Approach:
@@ -119,6 +120,5 @@ class MultiChunkTransformer(nn.Module):
         return self.scoring_nn(H).squeeze(-1)
 
 # Need to do training and inference
-
 
 

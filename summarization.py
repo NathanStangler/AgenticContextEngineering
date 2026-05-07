@@ -1,10 +1,16 @@
+import runtime_settings
 import torch
-from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
+from transformers import AutoConfig, AutoTokenizer, AutoModelForSeq2SeqLM
 
 class Summarization:
     def __init__(self, model_name="facebook/bart-large-cnn"):
         self.tokenizer = AutoTokenizer.from_pretrained(model_name)
-        self.model = AutoModelForSeq2SeqLM.from_pretrained(model_name)
+        config = AutoConfig.from_pretrained(model_name)
+        config.force_bos_token_to_be_generated = False
+        self.model = AutoModelForSeq2SeqLM.from_pretrained(model_name, config=config)
+        self.model.generation_config.forced_bos_token_id = 0
+        self.model.generation_config.max_length = None
+        self.model.generation_config.min_length = None
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.model = self.model.to(self.device)
 
@@ -33,7 +39,8 @@ class Summarization:
                 num_beams=4,
                 length_penalty=1.0,
                 no_repeat_ngram_size=3,
-                early_stopping=True
+                early_stopping=True,
+                forced_bos_token_id=0,
             )
 
         decoded = self.tokenizer.decode(generated[0], skip_special_tokens=True).strip()

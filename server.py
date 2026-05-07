@@ -1,6 +1,6 @@
+import runtime_settings
 from threading import Lock
 from mcp.server.fastmcp import FastMCP
-from context_manager import ContextManager
 from token_usage import count_tokens
 import uuid
 
@@ -14,9 +14,12 @@ def get_session(session_id):
 
 @mcp.tool()
 def create_session():
+    from context_manager import ContextManager
+
     session_id = uuid.uuid4().hex
+    manager = ContextManager()
     with lock:
-        sessions[session_id] = ContextManager()
+        sessions[session_id] = manager
     return {"session_id": session_id}
 
 @mcp.tool()
