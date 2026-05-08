@@ -43,3 +43,5 @@ wheelhouse/
 
 *.env
 !.env.example
+
+results/

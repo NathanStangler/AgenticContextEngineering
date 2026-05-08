@@ -116,6 +116,7 @@ def main():
     parser.add_argument("--limit", type=int, default=20)
     parser.add_argument("--reranker-weights", default="train/model.pth")
     parser.add_argument("--modes", nargs="+", default=["rag", "dynamic_context", "rag_rerank", "dynamic_context_rerank"])
+    parser.add_argument("--output", default=None)
     args = parser.parse_args()
 
     with open(args.data, "r") as f:
@@ -167,6 +168,10 @@ def main():
     df = df.sort_values(["mode", "k"]).reset_index(drop=True)
     print("\nBenchmark Results")
     print(df.to_string(index=False))
+
+    if args.output:
+        df.to_csv(args.output, index=False)
+        print(f"\nSaved results to: {args.output}")
 
 if __name__ == "__main__":
     main()

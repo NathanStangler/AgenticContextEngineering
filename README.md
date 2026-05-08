@@ -54,7 +54,7 @@ python agent.py
 Run the benchmark on the processed dataset:
 
 ```bash
-python benchmark.py --limit 20 --token-budget 600
+python benchmark.py --limit 20 --token-budget 600 --output results/retrieval_quality.csv
 ```
 
 The benchmark reports NDCG@K, Recall@K, and average context tokens for:
@@ -62,6 +62,13 @@ The benchmark reports NDCG@K, Recall@K, and average context tokens for:
 - `dynamic_context`
 - `rag_rerank`
 - `dynamic_context_rerank`
+
+## Token Reduction Evaluation
+Compute average context tokens and reduction vs full-context prompting:
+
+```bash
+python eval_token_reduction.py --limit 20 --token-budget 600 --output results/token_reduction.csv
+```
 
 ## Reranker Training
 Train the cross-attention re-ranker:
